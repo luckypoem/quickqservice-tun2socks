@@ -84,7 +84,8 @@ XBUILD_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUI
 RELEASE_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=linux/amd64,linux/arm64,linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le,windows/*,darwin/* $(CMDDIR)"
 WINDOWS_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/386 $(CMDDIR)"
 WINDOWS64_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/amd64 $(CMDDIR)"
-
+LINUX64_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/amd64 $(CMDDIR)"
+MACOS_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=darwin/amd64 $(CMDDIR)"
 
 all: build
 
@@ -103,6 +104,14 @@ windows:
 windows64:
 	mkdir -p $(BUILDDIR)
 	$(call with_copied_files,$(WINDOWS64_CMD))
+
+linux64:
+	mkdir -p $(BUILDDIR)
+	$(call with_copied_files,$(LINUX64_CMD))
+
+mac:
+	mkdir -p $(BUILDDIR)
+	$(call with_copied_files,$(MACOS_CMD))	
 
 xbuild:
 	mkdir -p $(BUILDDIR)
