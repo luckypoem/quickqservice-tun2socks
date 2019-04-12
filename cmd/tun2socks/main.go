@@ -18,7 +18,7 @@ import (
 	"github.com/eycorsican/go-tun2socks/tun"
 )
 
-var version = "undefined"
+var ver = "1.13.0-4.19.0"
 
 var handlerCreater = make(map[string]func(), 0)
 
@@ -39,10 +39,10 @@ type CmdArgs struct {
 	TunGw           *string
 	TunMask         *string
 	TunDns          *string
-	ProxyType       *string
+	//ProxyType       *string
 	VConfig         *string
 	Gateway         *string
-	SniffingType    *string
+	//SniffingType    *string
 	ProxyServer     *string
 	ProxyHost       *string
 	ProxyPort       *uint16
@@ -50,11 +50,12 @@ type CmdArgs struct {
 	ProxyPassword   *string
 	DelayICMP       *int
 	UdpTimeout      *time.Duration
-	Applog          *bool
+	//Applog          *bool
 	DisableDnsCache *bool
 	DnsFallback     *bool
 	LogLevel        *string
 	EnableFakeDns   *bool
+	DisableTun      *bool
 }
 
 type cmdFlag uint
@@ -62,7 +63,7 @@ type cmdFlag uint
 const (
 	fProxyServer cmdFlag = iota
 	fUdpTimeout
-	fApplog
+	//fApplog
 )
 
 var flagCreaters = map[cmdFlag]func(){
@@ -73,14 +74,16 @@ var flagCreaters = map[cmdFlag]func(){
 	},
 	fUdpTimeout: func() {
 		if args.UdpTimeout == nil {
-			args.UdpTimeout = flag.Duration("udpTimeout", 1*time.Minute, "Set timeout for UDP proxy connections in SOCKS and Shadowsocks")
+			args.UdpTimeout = flag.Duration("udpTimeout", 1*time.Minute, "Set timeout for UDP proxy connections")
 		}
 	},
+	/*
 	fApplog: func() {
 		if args.Applog == nil {
 			args.Applog = flag.Bool("applog", false, "Enable app logging (V2Ray, Shadowsocks and SOCKS5 handler)")
 		}
 	},
+	*/
 }
 
 func (a *CmdArgs) addFlag(f cmdFlag) {
@@ -110,14 +113,15 @@ func main() {
 	args.TunGw = flag.String("tunGw", "240.0.0.1", "TUN interface gateway")
 	args.TunMask = flag.String("tunMask", "255.255.255.0", "TUN interface netmask, as for IPv6, it's the prefixlen")
 	args.TunDns = flag.String("tunDns", "114.114.114.114,223.5.5.5", "DNS resolvers for TUN interface (only need on Windows)")
-	args.ProxyType = flag.String("proxyType", "socks", "Proxy handler type, e.g. socks, shadowsocks, v2ray")
+	//args.ProxyType = flag.String("proxyType", "socks", "Proxy handler type, e.g. socks, shadowsocks, v2ray")
 	args.DelayICMP = flag.Int("delayICMP", 10, "Delay ICMP packets for a short period of time, in milliseconds")
-	args.LogLevel = flag.String("loglevel", "info", "Logging level. (debug, info, warn, error, none)")
+	//args.LogLevel = flag.String("loglevel", "info", "Logging level. (debug, info, warn, error, none)")
+	args.DisableTun = flag.Bool("disableTun", false, "Disable TUN interface")
 
 	flag.Parse()
 
 	if *args.Version {
-		fmt.Println(version)
+		fmt.Println(ver)
 		os.Exit(0)
 	}
 
@@ -127,7 +131,8 @@ func main() {
 			fn()
 		}
 	}
-
+	
+	/*
 	// Set log level.
 	switch strings.ToLower(*args.LogLevel) {
 	case "debug":
@@ -143,61 +148,74 @@ func main() {
 	default:
 		panic("unsupport logging level")
 	}
+	*/
+	
+	if *args.DisableTun != true {
+		// Open the tun device.
+		dnsServers := strings.Split(*args.TunDns, ",")
+		tunDev, err := tun.OpenTunDevice(*args.TunName, *args.TunAddr, *args.TunGw, *args.TunMask, dnsServers)
+		if err != nil {
+			log.Fatalf("failed to open tun device: %v", err)
+		}
 
-	// Open the tun device.
-	dnsServers := strings.Split(*args.TunDns, ",")
-	tunDev, err := tun.OpenTunDevice(*args.TunName, *args.TunAddr, *args.TunGw, *args.TunMask, dnsServers)
-	if err != nil {
-		log.Fatalf("failed to open tun device: %v", err)
-	}
+		// Setup TCP/IP stack.
+		lwipWriter := core.NewLWIPStack().(io.Writer)
 
-	// Setup TCP/IP stack.
-	lwipWriter := core.NewLWIPStack().(io.Writer)
+		// Wrap a writer to delay ICMP packets if delay time is not zero.
+		if *args.DelayICMP > 0 {
+			log.Infof("ICMP packets will be delayed for %dms", *args.DelayICMP)
+			lwipWriter = filter.NewICMPFilter(lwipWriter, *args.DelayICMP).(io.Writer)
+		}
 
-	// Wrap a writer to delay ICMP packets if delay time is not zero.
-	if *args.DelayICMP > 0 {
-		log.Infof("ICMP packets will be delayed for %dms", *args.DelayICMP)
-		lwipWriter = filter.NewICMPFilter(lwipWriter, *args.DelayICMP).(io.Writer)
-	}
+		/*
+		// Wrap a writer to print out processes the creating network connections.
+		if args.Applog != nil && *args.Applog {
+			log.Infof("App logging is enabled")
+			lwipWriter = filter.NewApplogFilter(lwipWriter).(io.Writer)
+		}
 
-	// Wrap a writer to print out processes the creating network connections.
-	if args.Applog != nil && *args.Applog {
-		log.Infof("App logging is enabled")
-		lwipWriter = filter.NewApplogFilter(lwipWriter).(io.Writer)
-	}
-
-	// Register TCP and UDP handlers to handle accepted connections.
-	if creater, found := handlerCreater[*args.ProxyType]; found {
-		creater()
-	} else {
-		log.Fatalf("unsupported proxy type")
-	}
-
-	if args.DnsFallback != nil && *args.DnsFallback {
-		// Override the UDP handler with a DNS-over-TCP (fallback) UDP handler.
-		if creater, found := handlerCreater["dnsfallback"]; found {
+		// Register TCP and UDP handlers to handle accepted connections.
+		if creater, found := handlerCreater[*args.ProxyType]; found {
 			creater()
 		} else {
-			log.Fatalf("DNS fallback connection handler not found, build with `dnsfallback` tag")
+			log.Fatalf("unsupported proxy type")
+		}
+		*/
+		
+		if creater, found := handlerCreater["v2ray"]; found {
+			creater()
+		}
+		
+		if args.DnsFallback != nil && *args.DnsFallback {
+			// Override the UDP handler with a DNS-over-TCP (fallback) UDP handler.
+			if creater, found := handlerCreater["dnsfallback"]; found {
+				creater()
+			} else {
+				log.Fatalf("DNS fallback connection handler not found, build with `dnsfallback` tag")
+			}
+		}
+
+		// Register an output callback to write packets output from lwip stack to tun
+		// device, output function should be set before input any packets.
+		core.RegisterOutputFn(func(data []byte) (int, error) {
+			return tunDev.Write(data)
+		})
+
+		// Copy packets from tun device to lwip stack, it's the main loop.
+		go func() {
+			_, err := io.CopyBuffer(lwipWriter, tunDev, make([]byte, MTU))
+			if err != nil {
+				log.Fatalf("copying data failed: %v", err)
+			}
+		}()
+	} else {
+		if creater, found := handlerCreater["v2ray"]; found {
+			creater()
 		}
 	}
 
-	// Register an output callback to write packets output from lwip stack to tun
-	// device, output function should be set before input any packets.
-	core.RegisterOutputFn(func(data []byte) (int, error) {
-		return tunDev.Write(data)
-	})
-
-	// Copy packets from tun device to lwip stack, it's the main loop.
-	go func() {
-		_, err := io.CopyBuffer(lwipWriter, tunDev, make([]byte, MTU))
-		if err != nil {
-			log.Fatalf("copying data failed: %v", err)
-		}
-	}()
-
-	log.Infof("Running tun2socks")
-
+	log.Infof("Running quickqservice")
+	
 	osSignals := make(chan os.Signal, 1)
 	signal.Notify(osSignals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGHUP)
 	<-osSignals

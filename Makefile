@@ -6,7 +6,7 @@ GOCLEAN=$(GOCMD) clean
 VERSION=$(shell git describe --tags)
 DEBUG_LDFLAGS=''
 RELEASE_LDFLAGS='-s -w -X main.version=$(VERSION)'
-BUILD_TAGS?=dnscache socks shadowsocks v2ray redirect echo dnsfallback fakedns
+BUILD_TAGS?=dnscache v2ray echo
 DEBUG_BUILD_TAGS=$(BUILD_TAGS) debug
 BUILDDIR=$(shell pwd)/build
 CMDDIR=$(shell pwd)/cmd/tun2socks
@@ -82,7 +82,9 @@ BUILD_CMD="cd $(CMDDIR) && $(GOBUILD) -ldflags $(RELEASE_LDFLAGS) -o $(BUILDDIR)
 DBUILD_CMD="cd $(CMDDIR) && $(GOBUILD) -race -ldflags $(DEBUG_LDFLAGS) -o $(BUILDDIR)/$(PROGRAM) -v -tags '$(DEBUG_BUILD_TAGS)'"
 XBUILD_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=*/* $(CMDDIR)"
 RELEASE_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=linux/amd64,linux/arm64,linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le,windows/*,darwin/* $(CMDDIR)"
-WINDOWS_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/amd64 $(CMDDIR)"
+WINDOWS_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/386 $(CMDDIR)"
+WINDOWS64_CMD="cd $(BUILDDIR) && $(XGOCMD) -ldflags $(RELEASE_LDFLAGS) -tags '$(BUILD_TAGS)' --targets=windows/amd64 $(CMDDIR)"
+
 
 all: build
 
@@ -97,6 +99,10 @@ dbuild:
 windows:
 	mkdir -p $(BUILDDIR)
 	$(call with_copied_files,$(WINDOWS_CMD))
+
+windows64:
+	mkdir -p $(BUILDDIR)
+	$(call with_copied_files,$(WINDOWS64_CMD))
 
 xbuild:
 	mkdir -p $(BUILDDIR)
